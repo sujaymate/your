@@ -85,17 +85,24 @@ def plot_h5(
             ax2 = plt.subplot(gs[1, 0])
             ax3 = plt.subplot(gs[2, 0])
             ax4 = plt.subplot(gs[:, 1])
-            to_print = []
-            for key in f.attrs.keys():
-                if "filelist" in key or "mask" in key:
-                    pass
-                elif "filename" in key:
-                    to_print.append(f"filename : {os.path.basename(f.attrs[key])}\n")
-                    to_print.append(f"filepath : {os.path.dirname(f.attrs[key])}\n")
-                else:
-                    to_print.append(f"{key} : {f.attrs[key]}\n")
+
+            # Print only relevant info
+            labels = ['File', 'Beam', 'Arrival Time (UTC)', 'Rel. Arrival Time (s)',
+                      'Boxcar width (samples)', 'Boxcar Width (s)', 'DM (pc cm$^{-3}$)', 'SNR',
+                      'RA (deg)', 'DEC (deg)']
+            # print text
+            to_print = [f"File: {f.attrs['basename']}\n\n",
+                        f"Beam: {f.attrs['beam']:04d}\n\n",
+                        f"Arrival Time (UTC): {f.attrs['tcand_utc']}\n\n",
+                        f"Rel. Arrival Time (s): {f.attrs['tcand']: 7.2f}\n\n",
+                        f"Boxcar width (nsamples): {f.attrs['width']:d}\n\n",
+                        f"Boxcat width (s): {f.attrs['width']*f.attrs['tsamp']: 5.3f}\n\n",
+                        f"DM (pc cm$^{-3}$): {f.attrs['dm']: 6.1f}\n\n",
+                        f"SNR: {f.attrs['snr']: 6.2f}\n\n",
+                        f"RA (deg): {f.attrs['ra_deg']: 6.2f}\n\n",
+                        f"Dec (Deg): {f.attrs['dec_deg']: 6.2f}"]
             str_print = "".join(to_print)
-            ax4.text(0.2, 0, str_print, fontsize=14, ha="left", va="bottom", wrap=True)
+            ax4.text(0.2, 0.25, str_print, fontsize=14, ha="left", va="bottom", wrap=True)
             ax4.axis("off")
 
         ax1.plot(ts, freq_time.sum(0), "k-")
