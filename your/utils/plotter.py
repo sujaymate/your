@@ -97,7 +97,7 @@ def plot_h5(
                         f"Rel. Arrival Time (s): {f.attrs['tcand']: 7.2f}\n\n",
                         f"Boxcar width (nsamples): {f.attrs['width']:d}\n\n",
                         f"Boxcat width (s): {f.attrs['width']*f.attrs['tsamp']: 5.3f}\n\n",
-                        f"DM (pc cm$^{-3}$): {f.attrs['dm']: 6.1f}\n\n",
+                        f"DM (pc cm$^{{-3}}$): {f.attrs['dm']: 6.1f}\n\n",
                         f"SNR: {f.attrs['snr']: 6.2f}\n\n",
                         f"RA (deg): {f.attrs['ra_deg']: 6.2f}\n\n",
                         f"Dec (Deg): {f.attrs['dec_deg']: 6.2f}"]
