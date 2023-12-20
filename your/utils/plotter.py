@@ -81,9 +81,9 @@ def plot_h5(
         else:
             fig = plt.figure(figsize=(15, 10))
             gs = gridspec.GridSpec(3, 2, width_ratios=[4, 1], height_ratios=[1, 1, 1])
-            ax1 = plt.subplot(gs[0, 0])
             ax2 = plt.subplot(gs[1, 0])
-            ax3 = plt.subplot(gs[2, 0])
+            ax1 = plt.subplot(gs[0, 0], sharex=ax2)
+            ax3 = plt.subplot(gs[2, 0], sharex=ax2)
             ax4 = plt.subplot(gs[:, 1])
 
             # Print only relevant info
@@ -110,8 +110,9 @@ def plot_h5(
         ax2.imshow(
             freq_time,
             aspect="auto",
-            extent=[ts[0], ts[-1], fch1, fch1 + (nchan * foff)],
+            extent=[ts[0], ts[-1], fch1 + (nchan * foff), fch1], # Changed this to flip frequency axis ARVIND
             interpolation="none",
+            origin="lower",
         )
         ax2.set_ylabel("Frequency (MHz)")
         ax3.imshow(
@@ -129,7 +130,7 @@ def plot_h5(
                 filename = outdir + os.path.basename(h5_file)[:-3] + ".png"
             else:
                 filename = h5_file[:-3] + ".png"
-            plt.savefig(filename, bbox_inches="tight", dpi=300)
+            plt.savefig(filename, bbox_inches="tight") # Removed dpi=300 to reduce file size ARVIND
         else:
             plt.close()
 
