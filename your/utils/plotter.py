@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 
 import matplotlib
 
@@ -59,6 +60,20 @@ def plot_h5(
             f.attrs["snr_opt"],
             f.attrs["width"],
         )
+        
+        # Get DM vs SNR and nearby events data if it exists
+        add_verification = False
+        cluster_dir = Path(h5_file).parent.parent.joinpath("cluster_cand")
+        if cluster_dir.exists():
+            add_verification = True
+            
+            cluster_h5file = sorted(cluster_dir.glob("*.h5"))[0]
+            det_events = h5py.File(cluster_h5file, 'r')['det_events'][()]
+
+            DMvsSNR = get_DM_vs_SNR(det_events, f.attrs['label'])
+            nearby_events = get_nearby_events(det_events, f.attrs['tcand'])
+
+
         tlen = freq_time.shape[1]
         if tlen != 256:
             logging.warning(
@@ -79,30 +94,29 @@ def plot_h5(
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 7), sharex="col")
 
         else:
-            fig = plt.figure(figsize=(15, 10))
-            gs = gridspec.GridSpec(3, 2, width_ratios=[4, 1], height_ratios=[1, 1, 1])
+            fig = plt.figure(figsize=(12, 9))
+            gs = gridspec.GridSpec(3, 2, width_ratios=[2, 2], height_ratios=[1, 1, 1])
             ax2 = plt.subplot(gs[1, 0])
             ax1 = plt.subplot(gs[0, 0], sharex=ax2)
             ax3 = plt.subplot(gs[2, 0], sharex=ax2)
-            ax4 = plt.subplot(gs[:, 1])
+            ax4 = plt.subplot(gs[0, 1])
+            if add_verification:
+                ax5 = plt.subplot(gs[1, 1])
+                ax6 = plt.subplot(gs[2, 1])
 
-            # Print only relevant info
-            labels = ['File', 'Beam', 'Arrival Time (UTC)', 'Rel. Arrival Time (s)',
-                      'Boxcar width (samples)', 'Boxcar Width (s)', 'DM (pc cm$^{-3}$)', 'SNR',
-                      'RA (deg)', 'DEC (deg)']
             # print text
-            to_print = [f"File: {f.attrs['basename']}\n\n",
-                        f"Beam: {f.attrs['beam']:04d}\n\n",
-                        f"Arrival Time (UTC): {f.attrs['tcand_utc']}\n\n",
-                        f"Rel. Arrival Time (s): {f.attrs['tcand']: 7.2f}\n\n",
-                        f"Boxcar width (nsamples): {f.attrs['width']:d}\n\n",
-                        f"Boxcar width (s): {f.attrs['width']*f.attrs['tsamp']: 5.3f}\n\n",
-                        f"DM (pc cm$^{{-3}}$): {f.attrs['dm']: 6.1f}\n\n",
-                        f"SNR: {f.attrs['snr']: 6.2f}\n\n",
-                        f"RA (deg): {f.attrs['ra_deg']: 6.2f}\n\n",
+            to_print = [f"File: {f.attrs['basename']}\n",
+                        f"Beam: {f.attrs['beam']:04d}\n",
+                        f"Arrival Time (UTC): {f.attrs['tcand_utc']}\n",
+                        f"Rel. Arrival Time (s): {f.attrs['tcand']: 7.2f}\n",
+                        f"Boxcar width (nsamples): {f.attrs['width']:d}\n",
+                        f"Boxcar width (s): {f.attrs['width']*f.attrs['tsamp']: 5.3f}\n",
+                        f"DM (pc cm$^{{-3}}$): {f.attrs['dm']: 6.1f}\n",
+                        f"SNR: {f.attrs['snr']: 6.2f}\n",
+                        f"RA (deg): {f.attrs['ra_deg']: 6.2f}\n",
                         f"Dec (Deg): {f.attrs['dec_deg']: 6.2f}"]
             str_print = "".join(to_print)
-            ax4.text(0.2, 0.25, str_print, fontsize=14, ha="left", va="bottom", wrap=True)
+            ax4.text(0.0, 0., str_print, fontsize=12, ha="left", va="bottom", wrap=True)
             ax4.axis("off")
 
         ax1.plot(ts, freq_time.sum(0), "k-")
@@ -123,6 +137,23 @@ def plot_h5(
         )
         ax3.set_ylabel(r"DM (pc cm$^{-3}$)")
         ax3.set_xlabel("Time (ms)")
+        
+        if add_verification:
+            ax5.scatter(DMvsSNR['DM'], DMvsSNR['SNR'], c='C0')
+            ax5.set_xlabel(r"DM (pc cm$^{-3}$)")
+            ax5.set_ylabel("SNR")
+            
+            # this cluster
+            cluster = nearby_events['Label'] == f.attrs['label']
+            nearby_events['TIME'] = nearby_events['TIME'] - f.attrs['tcand']
+            ax6.scatter(nearby_events['TIME'][~cluster], nearby_events['DM'][~cluster], s=nearby_events['SNR'][~cluster],
+                        facecolors='none', edgecolors='grey')
+            ax6.scatter(nearby_events['TIME'][cluster], nearby_events['DM'][cluster], s=nearby_events['SNR'][cluster],
+                        facecolors='none', edgecolors='C0')
+            ax6.set_xlabel("Time (s)")
+            ax6.set_ylabel(r"DM (pc cm$^{-3}$)")
+            ax6.set_xlim([-50, 50])
+            
 
         plt.tight_layout()
         if save:
@@ -185,3 +216,37 @@ def save_bandpass(
     ax21.set_xlabel("Channel Numbers")
 
     return plt.savefig(bp_plot, bbox_inches="tight", dpi=300)
+
+
+def get_DM_vs_SNR(
+    det_events, label
+):
+    """ Function to return DM and SNR slice for given candidate from detected events
+
+    Args:
+        det_events (np.recarray): Detected singlepulse events
+        label (int): Cluster label for the candidate
+
+    Returns:
+        np.recarray : Detected event DM and SNR slice for the cluster in which the candidate belongs
+    """
+
+    cluster = det_events['Label'] == label
+    return det_events[['DM', 'SNR']][cluster]
+
+
+def get_nearby_events(
+    det_events, tcand
+):
+    """ Function to return events in the +/- 50 seconds of the detected candidate.
+
+    Args:
+        det_events (np.recarray): Detected singlepulse events
+        tcand (float): Candidate time relative to the start of filterbank file
+
+    Returns:
+        np.recarray: Detected event slice
+    """
+    
+    time_slice = (det_events['TIME'] > (tcand - 50)) & (det_events['TIME'] < (tcand + 50))
+    return det_events[time_slice]
