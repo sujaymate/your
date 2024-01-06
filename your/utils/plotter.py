@@ -141,6 +141,9 @@ def plot_h5(
         if add_verification:
             ax5.scatter(DMvsSNR['DM'], DMvsSNR['SNR'], c='C0')
             ax5.set_xlabel(r"DM (pc cm$^{-3}$)")
+            # DM at max SNR
+            DM_max = DMvsSNR['DM'][(np.argmax(DMvsSNR['SNR']))]
+            ax5.set_xlim([DM_max - 75, DM_max + 75])
             ax5.set_ylabel("SNR")
             
             # this cluster
@@ -153,6 +156,7 @@ def plot_h5(
             ax6.set_xlabel("Time (s)")
             ax6.set_ylabel(r"DM (pc cm$^{-3}$)")
             ax6.set_xlim([-50, 50])
+            ax6.set_ylim([0, 3000])
             
 
         plt.tight_layout()
