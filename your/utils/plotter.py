@@ -166,6 +166,7 @@ def plot_h5(
             else:
                 filename = h5_file[:-3] + ".png"
             plt.savefig(filename, bbox_inches="tight") # Removed dpi=300 to reduce file size ARVIND
+            plt.close(fig)
         else:
             plt.close()
 
