@@ -68,7 +68,8 @@ def plot_h5(
             add_verification = True
             
             cluster_h5file = sorted(cluster_dir.glob("*.h5"))[0]
-            det_events = h5py.File(cluster_h5file, 'r')['det_events'][()]
+            with h5py.File(cluster_h5file, 'r') as cluster_file:
+                det_events = cluster_file['det_events'][()]
 
             DMvsSNR = get_DM_vs_SNR(det_events, f.attrs['label'])
             nearby_events = get_nearby_events(det_events, f.attrs['tcand'])
