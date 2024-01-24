@@ -59,7 +59,9 @@ class Candidate(Your):
         self.width = width
         self.label = label
         self.snr = snr
-        self.id = f"cand_tstart_{self.tstart:.12f}_tcand_{self.tcand:.7f}_dm_{self.dm:.5f}_snr_{self.snr:.5f}"
+        self.tstart_unix = int(Time(self.tstart, format='mjd', scale='utc').unix)
+        tstring = f"tstart_{self.tstart_unix:10d}_tcand_{self.tcand:08.2f}"
+        self.id = "cand_" + tstring + f"_beam_{self.ibeam:04d}_dm_{self.dm:07.2f}_snr_{self.snr:06.2f}"
         self.data = None
         self.dedispersed = None
         self.dmt = None
@@ -116,7 +118,7 @@ class Candidate(Your):
             f.attrs["filelist"] = self.your_header.filelist
 
             # Update candidate RA/Dec and gb/gl
-            tcand_unix = Time(self.your_header.tstart_utc, format='isot').unix + self.tcand
+            tcand_unix = self.tstart_unix + self.tcand
 
             # get the beam model
             beam = self.ibeam
@@ -134,6 +136,8 @@ class Candidate(Your):
             # Add additional headers
             f.attrs["beam"] = beam
             f.attrs["tcand_utc"] = Time(tcand_unix, scale='utc', format='unix').isot
+            f.attrs["tcand_unix"] = tcand_unix
+            f.attrs["tstart_unix"] = self.tstart_unix
 
             # Copy over header information as attributes
             file_header = vars(self.your_header)
