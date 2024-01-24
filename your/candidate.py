@@ -9,6 +9,11 @@ from your.utils.misc import *
 from your.utils.misc import _decimate, _resize
 from your.utils.rfi import sk_sg_filter
 
+import beam_model
+from astropy.time import Time
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,6 +114,26 @@ class Candidate(Your):
             f.attrs["kill_mask"] = self.kill_mask
 
             f.attrs["filelist"] = self.your_header.filelist
+
+            # Update candidate RA/Dec and gb/gl
+            tcand_unix = Time(self.your_header.tstart_utc, format='isot').unix + self.tcand
+
+            # get the beam model
+            beam = self.ibeam
+            bm = beam_model.current_model_class(beam_model.current_config)
+            beam_pos = bm.get_beam_positions([beam], freqs=bm.clamp_freq)
+            beam_skypos = SkyCoord(*bm.get_equatorial_from_position(beam_pos[0, 0, 0],
+                                                                    beam_pos[0, 0, 1], tcand_unix)* u.deg)
+
+            # Update the coords
+            self.your_header.ra_deg = beam_skypos.ra.degree
+            self.your_header.dec_deg = beam_skypos.dec.degree
+            self.your_header.gl = beam_skypos.galactic.l.degree - 180
+            self.your_header.gb = beam_skypos.galactic.b.degree
+
+            # Add additional headers
+            f.attrs["beam"] = beam
+            f.attrs["tcand_utc"] = Time(tcand_unix, scale='utc', format='unix').isot
 
             # Copy over header information as attributes
             file_header = vars(self.your_header)
