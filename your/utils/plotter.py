@@ -1,6 +1,5 @@
 import logging
 import os
-from pathlib import Path
 
 import matplotlib
 
@@ -62,21 +61,6 @@ def plot_h5(
             f.attrs["snr_opt"],
             f.attrs["width"],
         )
-        
-        # Get DM vs SNR and nearby events data if it exists
-        add_verification = False
-        cluster_dir = Path(h5_file).parent.parent.joinpath("cluster_cand")
-        if cluster_dir.exists():
-            add_verification = True
-            
-            cluster_h5file = sorted(cluster_dir.glob("*.h5"))[0]
-            with h5py.File(cluster_h5file, 'r') as cluster_file:
-                det_events = cluster_file['det_events'][()]
-
-            DMvsSNR = get_DM_vs_SNR(det_events, f.attrs['label'])
-            nearby_events = get_nearby_events(det_events, f.attrs['tcand'])
-
-
         tlen = freq_time.shape[1]
         if tlen != 256:
             logging.warning(
@@ -97,29 +81,23 @@ def plot_h5(
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 7), sharex="col")
 
         else:
-            fig = plt.figure(figsize=(12, 9))
-            gs = gridspec.GridSpec(3, 2, width_ratios=[2, 2], height_ratios=[1, 1, 1])
+            fig = plt.figure(figsize=(15, 10))
+            gs = gridspec.GridSpec(3, 2, width_ratios=[4, 1], height_ratios=[1, 1, 1])
+            ax1 = plt.subplot(gs[0, 0])
             ax2 = plt.subplot(gs[1, 0])
-            ax1 = plt.subplot(gs[0, 0], sharex=ax2)
-            ax3 = plt.subplot(gs[2, 0], sharex=ax2)
-            ax4 = plt.subplot(gs[0, 1])
-            if add_verification:
-                ax5 = plt.subplot(gs[1, 1])
-                ax6 = plt.subplot(gs[2, 1])
-
-            # print text
-            to_print = [f"File: {f.attrs['basename']}\n",
-                        f"Beam: {f.attrs['beam']:04d}\n",
-                        f"Arrival Time (UTC): {f.attrs['tcand_utc']}\n",
-                        f"Rel. Arrival Time (s): {f.attrs['tcand']: 7.2f}\n",
-                        f"Boxcar width (nsamples): {f.attrs['width']:d}\n",
-                        f"Boxcar width (s): {f.attrs['width']*f.attrs['tsamp']: 5.3f}\n",
-                        f"DM (pc cm$^{{-3}}$): {f.attrs['dm']: 6.1f}\n",
-                        f"SNR: {f.attrs['snr']: 6.2f}\n",
-                        f"RA (deg): {f.attrs['ra_deg']: 6.2f}\n",
-                        f"Dec (Deg): {f.attrs['dec_deg']: 6.2f}"]
+            ax3 = plt.subplot(gs[2, 0])
+            ax4 = plt.subplot(gs[:, 1])
+            to_print = []
+            for key in f.attrs.keys():
+                if "filelist" in key or "mask" in key:
+                    pass
+                elif "filename" in key:
+                    to_print.append(f"filename : {os.path.basename(f.attrs[key])}\n")
+                    to_print.append(f"filepath : {os.path.dirname(f.attrs[key])}\n")
+                else:
+                    to_print.append(f"{key} : {f.attrs[key]}\n")
             str_print = "".join(to_print)
-            ax4.text(0.0, 0., str_print, fontsize=12, ha="left", va="bottom", wrap=True)
+            ax4.text(0.2, 0, str_print, fontsize=14, ha="left", va="bottom", wrap=True)
             ax4.axis("off")
 
         ax1.plot(ts, freq_time.sum(0), "k-")
@@ -127,9 +105,8 @@ def plot_h5(
         ax2.imshow(
             freq_time,
             aspect="auto",
-            extent=[ts[0], ts[-1], fch1 + (nchan * foff), fch1], # Changed this to flip frequency axis ARVIND
+            extent=[ts[0], ts[-1], fch1, fch1 + (nchan * foff)],
             interpolation="none",
-            origin="lower",
         )
         ax2.set_ylabel("Frequency (MHz)")
         ax3.imshow(
@@ -140,27 +117,6 @@ def plot_h5(
         )
         ax3.set_ylabel(r"DM (pc cm$^{-3}$)")
         ax3.set_xlabel("Time (ms)")
-        
-        if add_verification:
-            ax5.scatter(DMvsSNR['DM'], DMvsSNR['SNR'], c='C0')
-            ax5.set_xlabel(r"DM (pc cm$^{-3}$)")
-            # DM at max SNR
-            DM_max = DMvsSNR['DM'][(np.argmax(DMvsSNR['SNR']))]
-            ax5.set_xlim([DM_max - 75, DM_max + 75])
-            ax5.set_ylabel("SNR")
-            
-            # this cluster
-            cluster = nearby_events['Label'] == f.attrs['label']
-            nearby_events['TIME'] = nearby_events['TIME'] - f.attrs['tcand']
-            ax6.scatter(nearby_events['TIME'][~cluster], nearby_events['DM'][~cluster], s=nearby_events['SNR'][~cluster],
-                        facecolors='none', edgecolors='grey')
-            ax6.scatter(nearby_events['TIME'][cluster], nearby_events['DM'][cluster], s=nearby_events['SNR'][cluster],
-                        facecolors='none', edgecolors='C0')
-            ax6.set_xlabel("Time (s)")
-            ax6.set_ylabel(r"DM (pc cm$^{-3}$)")
-            ax6.set_xlim([-50, 50])
-            ax6.set_ylim([0, 3000])
-            
 
         plt.tight_layout()
         if save:
@@ -169,7 +125,6 @@ def plot_h5(
             else:
                 filename = h5_file[:-3] + ".png"
             plt.savefig(filename, bbox_inches="tight", dpi=dpi)
-
         else:
             plt.close()
 
@@ -224,6 +179,162 @@ def save_bandpass(
     ax21.set_xlabel("Channel Numbers")
 
     return plt.savefig(bp_plot, bbox_inches="tight", dpi=300)
+
+
+def plot_h5_chime(
+    h5_file,
+    det_events,
+    save=True,
+    detrend_ft=True,
+    publication=False,
+    mad_filter=False,
+    dpi=300,
+    outdir=None,
+):
+    """
+    Plot the h5 candidates
+
+    Args:
+        mad_filter (int): use MAD filter to clip data
+        h5_file (str): Name of the h5 file
+        det_events (np.recarray or str): Array or h5 file with all detected events
+        save (bool): Save the file as a png
+        detrend_ft (bool): detrend the frequency time plot
+        publication (bool): make publication quality plot
+        dpi (int): DPI of output png (default: 300)
+        outdir (str): Path to the save the files into.
+
+    Returns:
+        None
+
+    """
+    with h5py.File(h5_file, "r") as f:
+        dm_time = np.array(f["data_dm_time"])
+        if detrend_ft:
+            freq_time = detrend(np.array(f["data_freq_time"])[:, ::-1].T)
+        else:
+            freq_time = np.array(f["data_freq_time"])[:, ::-1].T
+        dm_time[dm_time != dm_time] = 0
+        freq_time[freq_time != freq_time] = 0
+        freq_time -= np.median(freq_time)
+        freq_time /= np.std(freq_time)
+        fch1, foff, nchan, dm, cand_id, tsamp, dm_opt, snr, snr_opt, width = (
+            f.attrs["fch1"],
+            f.attrs["foff"],
+            f.attrs["nchans"],
+            f.attrs["dm"],
+            f.attrs["cand_id"],
+            f.attrs["tsamp"],
+            f.attrs["dm_opt"],
+            f.attrs["snr"],
+            f.attrs["snr_opt"],
+            f.attrs["width"],
+        )
+        
+        # Get DM vs SNR and nearby events data
+        if isinstance(det_events, str):
+            with h5py.File(det_events, 'r') as cluster_file:
+                det_events = cluster_file['det_events'][()]
+
+        DMvsSNR = get_DM_vs_SNR(det_events, f.attrs['label'])
+        nearby_events = get_nearby_events(det_events, f.attrs['tcand'])
+
+
+        tlen = freq_time.shape[1]
+        if tlen != 256:
+            logging.warning(
+                "Lengh of time axis is not 256. This data is probably not pre-processed."
+            )
+        l = np.linspace(-tlen // 2, tlen // 2, tlen)
+        if width > 1:
+            ts = l * tsamp * width * 1000 / 2
+        else:
+            ts = l * tsamp * 1000
+
+        if mad_filter:
+            freq_time = smad_plotter(freq_time, float(mad_filter))
+
+        plt.clf()
+
+        if publication:
+            fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(5, 7), sharex="col")
+
+        else:
+            fig = plt.figure(figsize=(12, 9))
+            gs = gridspec.GridSpec(3, 2, width_ratios=[2, 2], height_ratios=[1, 1, 1])
+            ax2 = plt.subplot(gs[1, 0])
+            ax1 = plt.subplot(gs[0, 0], sharex=ax2)
+            ax3 = plt.subplot(gs[2, 0], sharex=ax2)
+            ax4 = plt.subplot(gs[0, 1])
+            ax5 = plt.subplot(gs[1, 1])
+            ax6 = plt.subplot(gs[2, 1])
+
+            # print text
+            to_print = [f"File: {f.attrs['basename']}\n",
+                        f"Beam: {f.attrs['beam']:04d}\n",
+                        f"Arrival Time (UTC): {f.attrs['tcand_utc']}\n",
+                        f"Rel. Arrival Time (s): {f.attrs['tcand']: 7.2f}\n",
+                        f"Boxcar width (nsamples): {f.attrs['width']:d}\n",
+                        f"Boxcar width (s): {f.attrs['width']*f.attrs['tsamp']: 5.3f}\n",
+                        f"DM (pc cm$^{{-3}}$): {f.attrs['dm']: 6.1f}\n",
+                        f"SNR: {f.attrs['snr']: 6.2f}\n",
+                        f"RA (deg): {f.attrs['ra_deg']: 6.2f}\n",
+                        f"Dec (Deg): {f.attrs['dec_deg']: 6.2f}"]
+            str_print = "".join(to_print)
+            ax4.text(0.0, 0., str_print, fontsize=12, ha="left", va="bottom", wrap=True)
+            ax4.axis("off")
+
+        ax1.plot(ts, freq_time.sum(0), "k-")
+        ax1.set_ylabel("Flux (Arb. Units)")
+        ax2.imshow(
+            freq_time,
+            aspect="auto",
+            extent=[ts[0], ts[-1], fch1 + (nchan * foff), fch1], # Changed this to flip frequency axis ARVIND
+            interpolation="none",
+            origin="lower",
+        )
+        ax2.set_ylabel("Frequency (MHz)")
+        ax3.imshow(
+            dm_time,
+            aspect="auto",
+            extent=[ts[0], ts[-1], 2 * dm, 0],
+            interpolation="none",
+        )
+        ax3.set_ylabel(r"DM (pc cm$^{-3}$)")
+        ax3.set_xlabel("Time (ms)")
+        
+        ax5.scatter(DMvsSNR['DM'], DMvsSNR['SNR'], c='C0')
+        ax5.set_xlabel(r"DM (pc cm$^{-3}$)")
+        # DM at max SNR
+        DM_max = DMvsSNR['DM'][(np.argmax(DMvsSNR['SNR']))]
+        ax5.set_xlim([DM_max - 75, DM_max + 75])
+        ax5.set_ylabel("SNR")
+        
+        # this cluster
+        cluster = nearby_events['Label'] == f.attrs['label']
+        nearby_events['TIME'] = nearby_events['TIME'] - f.attrs['tcand']
+        ax6.scatter(nearby_events['TIME'][~cluster], nearby_events['DM'][~cluster], s=nearby_events['SNR'][~cluster],
+                    facecolors='none', edgecolors='grey')
+        ax6.scatter(nearby_events['TIME'][cluster], nearby_events['DM'][cluster], s=nearby_events['SNR'][cluster],
+                    facecolors='none', edgecolors='C0')
+        ax6.set_xlabel("Time (s)")
+        ax6.set_ylabel(r"DM (pc cm$^{-3}$)")
+        ax6.set_xlim([-50, 50])
+        ax6.set_ylim([0, 3000])
+            
+
+        plt.tight_layout()
+        if save:
+            if outdir:
+                filename = outdir + os.path.basename(h5_file)[:-3] + ".png"
+            else:
+                filename = h5_file[:-3] + ".png"
+            plt.savefig(filename, bbox_inches="tight", dpi=dpi)
+
+        else:
+            plt.close()
+
+    return None
 
 
 def get_DM_vs_SNR(
